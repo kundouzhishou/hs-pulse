@@ -1,0 +1,15 @@
+{
+	"name": "hs-pulse",
+	"version": "0.0.1",
+	"description": "handshake tool",
+    "main": "app.js",
+    "license": "MIT",
+    "repository": "https://github.com/kundouzhishou/hs-pulse",
+	"scripts": {
+		"start": "node --use_strict app.js"
+	},
+	"dependencies": {
+		"hs-client": "0.0.8",
+		"hsd": "2.1.3"
+	}
+}
