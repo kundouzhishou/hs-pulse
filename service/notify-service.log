@@ -39,3 +39,16 @@ data file is not readable now ...
 data file is not readable now ...
 data file is not readable now ...
 data file is not readable now ...
+/Users/jayson/Documents/git/hs-pulse/service/notify-service.js:6
+const client = new NodeClient(config.hsClientOptions);
+               ^
+
+ReferenceError: NodeClient is not defined
+    at Object.<anonymous> (/Users/jayson/Documents/git/hs-pulse/service/notify-service.js:6:16)
+    at Module._compile (internal/modules/cjs/loader.js:1158:30)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:1178:10)
+    at Module.load (internal/modules/cjs/loader.js:1002:32)
+    at Function.Module._load (internal/modules/cjs/loader.js:901:14)
+    at Function.executeUserEntryPoint [as runMain] (internal/modules/run_main.js:74:12)
+    at internal/main/run_main_module.js:18:47
+2020-04-02T13:30:14.787Z start notify service ...

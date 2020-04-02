@@ -2,6 +2,7 @@ var request = require('request');
 
 const fs = require('fs');
 
+const {NodeClient,} = require('hs-client');
 const config = require("../config")
 const client = new NodeClient(config.hsClientOptions);
 
