@@ -1,16 +1,16 @@
-const translate = require("../youdao")
-var numeral = require('numeral');
+const numeral = require('numeral');
+const util = require("util")
+const request = require("sync-request")
 
 const {google} = require('googleapis');
 const customsearch = google.customsearch('v1');
-const {NodeClient,} = require('hs-client');
 
 const Domain = require("../domain")
 var RedisClient = require("../redis-client");
 var redisClient = new RedisClient().getInstance();
 
+const {NodeClient,} = require('hs-client');
 const config = require("../config")
-
 const nodeClient = new NodeClient(config.hsClientOptions);
 
 async function tick() {
@@ -51,6 +51,7 @@ async function tickTranslateAndGoogle() {
         if(targetDomain) {
             console.log("target domain:",JSON.stringify(targetDomain));
 
+            // google search name
             const res = await customsearch.cse.list({
                 cx: config.googleOptions.cx,
                 q: targetDomain.name,
@@ -59,15 +60,28 @@ async function tickTranslateAndGoogle() {
             let totalResults = res.data.searchInformation.totalResults;
             let formatedResult = numeral(totalResults).format('0,0');
             console.log("google search:",targetDomain.name,formatedResult);
-
             targetDomain.score = formatedResult;
 
-            translate(targetDomain.name,function(res){
-                targetDomain.translate = res;
+            // translate name
+            
+            const url = "https://translation.googleapis.com/language/translate/v2/?q=%s&source=en&target=zh&key=%s";
+            var reqRes = request('GET',util.format(url,targetDomain.name,config.googleOptions.auth));
+            let translateName = targetDomain.name;
+            if(!reqRes.isError() && reqRes.statusCode == 200) {
+                obj = JSON.parse(reqRes.getBody());
+                try {
+                    translateName = obj["data"]["translations"][0]["translatedText"];
+                    console.log("translate successful",targetDomain.name,translateName);
+                }catch(err) {
+                    console.log("translate failed",reqRes.getBody());
+                }
+            }else {
+                console.log("translate failed",reqRes.getBody());
+            }
 
-                // console.log("update domain",JSON.stringify(targetDomain,0,4));
-                redisClient.set(targetDomain);
-            });
+            targetDomain.translate = translateName;
+            console.log("update domain",JSON.stringify(targetDomain,0,4));
+            redisClient.set(targetDomain);
         }
     });
 }
@@ -91,6 +105,3 @@ console.log(new Date(),"start domain service ...");
 // tick();
 run();
 runTranslateAndGoogle();
-
-// let domain = new Domain("labs",11);
-// print(domain.toString());

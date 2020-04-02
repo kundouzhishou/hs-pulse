@@ -6,6 +6,10 @@ const config = require("./config")
 const {NodeClient,} = require('hs-client');
 const client = new NodeClient(config.hsClientOptions);
 
+const Domain = require("../domain")
+var RedisClient = require("../redis-client");
+var redisClient = new RedisClient().getInstance();
+
 const DATA_FILE = "data.json";
 
 // hsd-cli rpc getnameinfo 'stanforth'
@@ -14,6 +18,7 @@ async function run() {
     console.log("start run ...");
     var mydata = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
 
+    redisClient.getAllDomains();
     const result = await client.execute('getnames');
     const checkPointBlock = mydata["checkPointBlock"];
     
