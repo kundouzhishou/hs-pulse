@@ -1,24 +1,10 @@
-const {NodeClient, WalletClient} = require('hs-client');
-const {Network} = require('hsd');
-const network = Network.get('main');
-
 const fs = require('fs');
 const util = require("util")
+const translate = require("./youdao")
 
-const clientOptions = {
-	network: network.type,
-	port: network.rpcPort,
-	apiKey: 'api-key'
-}
-
-const walletOptions = {
-	network: network.type,
-	port: network.walletPort,
-	apiKey: 'api-key'
-}
-
-const client = new NodeClient(clientOptions);
-const wallet = new WalletClient(walletOptions);
+const config = require("./config")
+const {NodeClient,} = require('hs-client');
+const client = new NodeClient(config.hsClientOptions);
 
 const DATA_FILE = "data.json";
 
@@ -50,8 +36,9 @@ async function run() {
         if (element["bidEndBlock"] > lastBlock && count > MIN_COUNT) {
             return false;
         }
-
-        console.log(util.format("%s. %s %s %s",count.toString().padStart(3), element["name"].padStart(30), element["blockleft"].toString().padStart(3),element["bidEndBlock"].toString().padStart(8)));
+        // translateWord = translate(element["name"]);
+        translateWord = "";
+        console.log(util.format("%s. %s %s %s %s",count.toString().padStart(3), element["name"].padStart(30), element["blockleft"].toString().padStart(3),element["bidEndBlock"].toString().padStart(8),translateWord));
         count ++;
         lastBlock = element["bidEndBlock"];
         return true;
