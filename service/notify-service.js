@@ -9,8 +9,9 @@ const client = new NodeClient(config.hsClientOptions);
 const BLOCK_LEFT = 2;
 
 const NOTIFY_URL = 'http://miaotixing.com/trigger';
-// t9arTWL test: tufnPS0
-const ID_DOMAINM = "t9arTWL";
+
+//config.miaotixing.[id,id_test]
+const ID_DOMAINM = config.miaotixing.id;
 
 // curl -d "id=tufnPS0" http://miaotixing.com/trigger
 

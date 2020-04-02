@@ -1,13 +1,11 @@
 const fs = require('fs');
 const util = require("util")
-const translate = require("./youdao")
 
 const config = require("./config")
-const {NodeClient,} = require('hs-client');
-const client = new NodeClient(config.hsClientOptions);
+const {NodeClient} = require('hs-client');
+const nodeClient = new NodeClient(config.hsClientOptions);
 
-const Domain = require("../domain")
-var RedisClient = require("../redis-client");
+var RedisClient = require("./redis-client");
 var redisClient = new RedisClient().getInstance();
 
 const DATA_FILE = "data.json";
@@ -17,44 +15,66 @@ const DATA_FILE = "data.json";
 async function run() {
     console.log("start run ...");
     var mydata = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-
-    redisClient.getAllDomains();
-    const result = await client.execute('getnames');
     const checkPointBlock = mydata["checkPointBlock"];
     
+    const clientinfo = await nodeClient.getInfo();
+    let blockheight = clientinfo["chain"]["height"];
+
     let targetnames = [];
-    result.forEach(element => {
-        if(element["state"] == "BIDDING" && element["stats"]["bidPeriodEnd"] > checkPointBlock) {
-            targetnames.push({"name":element["name"],"blockleft":element["stats"]["blocksUntilReveal"],"bidEndBlock":element["stats"]["bidPeriodEnd"]})
+    redisClient.getAllDomains(function(res) {
+        for(domain of res) {
+            // domain is bidding state
+            if(domain.bidEndHeight() > blockheight && domain.bidStartHeight() < blockheight) {
+                if(domain.bidEndHeight() > checkPointBlock) {
+                    targetnames.push(domain);
+                }
+            } 
         }
-    });
-    targetnames.sort(function(a,b) {
-        return a["blockleft"] - b["blockleft"];
-    })
 
-    // make sure outputs have entire block data and more than MIN_COUNT
-    let lastBlock = 0;
-    let count = 1;
-    const MIN_COUNT = 30;
-    // console.log(targetnames.length);
-    targetnames.every(element => {
-        if (element["bidEndBlock"] > lastBlock && count > MIN_COUNT) {
-            return false;
-        }
-        // translateWord = translate(element["name"]);
-        translateWord = "";
-        console.log(util.format("%s. %s %s %s %s",count.toString().padStart(3), element["name"].padStart(30), element["blockleft"].toString().padStart(3),element["bidEndBlock"].toString().padStart(8),translateWord));
-        count ++;
-        lastBlock = element["bidEndBlock"];
-        return true;
-    });
-    // write block info back to data.json
-    mydata["checkPointBlock"] = lastBlock;
-    fs.writeFileSync(DATA_FILE,JSON.stringify(mydata,null,4));
+        // make sure outputs have entire block data and more than MIN_COUNT
+        let lastBlock = 0;
+        let count = 1;
+        const MIN_COUNT = 30;
+        // console.log(targetnames.length);
+        targetnames.every(domain => {
+            if (domain.bidEndHeight() > lastBlock && count > MIN_COUNT) {
+                // break =>every
+                return false;
+            }
+            let leftBlockStr = (domain.bidEndHeight() - blockheight).toString().padStart(3);
+            let endBlockStr = domain.bidEndHeight().toString().padStart(8);
+            let leftTime = getTimeInfo(domain.bidEndHeight() - blockheight).toString().padStart(10);
+            let scoreStr = domain.score.toString().padStart(12);
+            let translateStr = domain.translate;
+            console.log(util.format("%s. %s   %s %s   %s     %s",count.toString().padStart(3), domain.name.padStart(30), leftBlockStr ,leftTime,scoreStr,translateStr));
+            count ++;
+            lastBlock = domain.bidEndHeight();
+            return true;
+        });
+        // write block info back to data.json
+        mydata["checkPointBlock"] = lastBlock;
+        fs.writeFileSync(DATA_FILE,JSON.stringify(mydata,null,4));
 
-    console.log("run end ...");
+        redisClient.quit();
+        console.log("run end ...");
+    });
+}
+
+function getTimeInfo(block) {
+    let totalMinutes = block * 10;
+    let minutes = totalMinutes % 60;
+    let totalHours = Math.floor(totalMinutes / 60);
+    let hours = totalHours % 24;
+    let totalDays = Math.floor(totalHours / 24);
+    if (totalHours == 0) {
+        return `${totalMinutes}分`;
+    }else if(totalDays == 0) {
+        return `${hours}时${minutes}分`;
+    }else {
+        return `${totalDays}天${hours}时${minutes}分`;
+    }
+    return "--";
 }
 
 run();
-
 

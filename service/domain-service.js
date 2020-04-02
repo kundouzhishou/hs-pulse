@@ -14,9 +14,9 @@ const config = require("../config")
 const nodeClient = new NodeClient(config.hsClientOptions);
 
 async function tick() {
-    // console.log("domain service tick ...");
+    console.log("domain service tick ...");
     const result = await nodeClient.execute('getnames');
-    // console.log(result.length);
+    console.log(result.length);
 
     for(let element of result) {
         await new Promise(resolve => setTimeout(resolve, 10));
@@ -32,15 +32,15 @@ async function tick() {
 async function tickTranslateAndGoogle() {
     const clientinfo = await nodeClient.getInfo();
     let blockheight = clientinfo["chain"]["height"];
-    console.log("current height:",blockheight);
+    // console.log("current height:",blockheight);
     redisClient.getAllDomains(async function(res) {
         let targetDomain = null;
         for(let domain of res) {
-            if(domain.bidStartHeight() <= blockheight) {
+            if(domain.bidEndHeight() <= blockheight) {
                 continue;
             }
 
-            if(domain.translate != "" || domain.score != 0) {
+            if(domain.translate != "" || (domain.score != 0 && domain.score != "")) {
                 continue;
             }
 
@@ -48,6 +48,7 @@ async function tickTranslateAndGoogle() {
                 targetDomain = domain;
             }
         }
+
         if(targetDomain) {
             console.log("target domain:",JSON.stringify(targetDomain));
 
@@ -57,33 +58,38 @@ async function tickTranslateAndGoogle() {
                 q: targetDomain.name,
                 auth: config.googleOptions.auth,
             });
+            JSON.stringify(res.data,0,4);
             let totalResults = res.data.searchInformation.totalResults;
             let formatedResult = numeral(totalResults).format('0,0');
             console.log("google search:",targetDomain.name,formatedResult);
             targetDomain.score = formatedResult;
 
             // translate name
-            
-            const url = "https://translation.googleapis.com/language/translate/v2/?q=%s&source=en&target=zh&key=%s";
-            var reqRes = request('GET',util.format(url,targetDomain.name,config.googleOptions.auth));
-            let translateName = targetDomain.name;
-            if(!reqRes.isError() && reqRes.statusCode == 200) {
-                obj = JSON.parse(reqRes.getBody());
-                try {
-                    translateName = obj["data"]["translations"][0]["translatedText"];
-                    console.log("translate successful",targetDomain.name,translateName);
-                }catch(err) {
-                    console.log("translate failed",reqRes.getBody());
-                }
-            }else {
-                console.log("translate failed",reqRes.getBody());
-            }
-
-            targetDomain.translate = translateName;
+            targetDomain.translate = googleTranslate(targetDomain.name);
             console.log("update domain",JSON.stringify(targetDomain,0,4));
             redisClient.set(targetDomain);
         }
     });
+}
+
+function googleTranslate(name) {
+    const url = "https://translation.googleapis.com/language/translate/v2/?q=%s&source=en&target=zh&key=%s";
+    var reqRes = request('GET',util.format(url,name,config.googleOptions.auth));
+    let translateName = name;
+    if(!reqRes.isError() && reqRes.statusCode == 200) {
+        obj = JSON.parse(reqRes.getBody());
+        try {
+            console.log(JSON.stringify(obj,0,4));
+            translateName = obj["data"]["translations"][0]["translatedText"];
+            console.log("translate successful",name,translateName);
+        }catch(err) {
+            console.log(err);
+            console.log("translate failed-1",reqRes.getBody());
+        }
+    }else {
+        console.log("translate failed-2",reqRes.getBody());
+    }
+    return translateName;
 }
 
 async function run() {

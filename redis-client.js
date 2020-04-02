@@ -50,6 +50,10 @@ class RedisClient {
             callback(res);
         });
     }
+
+    quit() {
+        client.quit();
+    }
 }
 
 class Singleton {

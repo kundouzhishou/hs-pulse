@@ -63,7 +63,11 @@ class Domain {
     }
 
     bidStartHeight() {
-        return this.height + 36 + 720;
+        return this.height;
+    }
+
+    bidEndHeight() {
+        return this.bidStartHeight() + 5*6*24 + 36;
     }
 }
 
