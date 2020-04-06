@@ -5,29 +5,13 @@ const request = require("sync-request")
 const {google} = require('googleapis');
 const customsearch = google.customsearch('v1');
 
-const Domain = require("../domain")
+const {Domain,Block} = require("../domain")
 var RedisClient = require("../redis-client");
 var redisClient = new RedisClient().getInstance();
 
 const {NodeClient,} = require('hs-client');
 const config = require("../config")
 const nodeClient = new NodeClient(config.hsClientOptions);
-
-async function tick() {
-    console.log("domain service tick ...");
-    const result = await nodeClient.execute('getnames');
-    console.log(result.length);
-
-    for(let element of result) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        // console.log(element);
-        redisClient.exists(element["name"], function(res) {
-            if(!res) {
-                redisClient.set(new Domain(element["name"],element["height"]));
-            }
-        });
-    }
-}
 
 async function tickTranslateAndGoogle() {
     const clientinfo = await nodeClient.getInfo();
@@ -67,12 +51,69 @@ async function tickTranslateAndGoogle() {
             // translate name
             targetDomain.translate = googleTranslate(targetDomain.name);
             console.log("update domain",JSON.stringify(targetDomain,0,4));
-            redisClient.set(targetDomain);
+            redisClient.setDomain(targetDomain);
         }
     });
 }
 
-function googleTranslate(name) {
+async function tickBlockScan() {
+    const clientinfo = await nodeClient.getInfo();
+    let blockheight = clientinfo["chain"]["height"];
+
+    redisClient.getBlocks(async function(res) {
+        for(let i = 1; i <= blockheight; i++) {
+            let isExist = false;
+            for(let block of res) {
+                if(block.height == i) {
+                    isExist = true;
+                    break;
+                }
+            }
+            if(!isExist) {
+                const result = await nodeClient.execute('getblockbyheight', [ i, 1, 0 ]);
+                let txData = {};
+                for(let txId of result["tx"]) {
+                    const result = await nodeClient.getTX(txId);
+                    // console.log(JSON.stringify(result,0,4));
+                    txData[txId] = result;
+                }
+                let block = new Block(i,txData);
+                redisClient.setBlock(block);
+
+                updateDomainsFromBlock(block);
+
+                await new Promise(resolve => setTimeout(resolve, 0.1*1000));
+            }
+        }
+    });
+}
+
+async function updateDomainsFromBlock(block) {
+    for(let txId in block.txData) {
+        let txData = block.txData[txId];
+        let outputs = txData["outputs"];
+        for(let i = 0; i < outputs.length; i++) {
+            let output = outputs[i];
+            let covenant = output["covenant"];
+            let txType = covenant["type"];
+            let items = covenant["items"];
+            if(txType == 2) {
+                // name hash, zero height, and name
+                const name = await nodeClient.execute('getnamebyhash', [items[0]]);
+                // console.log("name is :",name,block.height);
+                // console.log(JSON.stringify(outputs,0,4));
+                redisClient.existsDomain(name, function(res) {
+                    if(!res) {
+                        // console.log("set name",name,block.height);
+                        redisClient.setDomain(new Domain(name,block.height));
+                    }
+                });
+            }
+        }
+    }
+}
+
+async function googleTranslate(name) {
     const url = "https://translation.googleapis.com/language/translate/v2/?q=%s&source=en&target=zh&key=%s";
     var reqRes = request('GET',util.format(url,name,config.googleOptions.auth));
     let translateName = name;
@@ -92,13 +133,6 @@ function googleTranslate(name) {
     return translateName;
 }
 
-async function run() {
-    while(true) {
-        tick();
-        await new Promise(resolve => setTimeout(resolve, 5*1000));
-    }
-}
-
 async function runTranslateAndGoogle() {
     while(true) {
         tickTranslateAndGoogle();
@@ -106,8 +140,31 @@ async function runTranslateAndGoogle() {
     }
 }
 
+async function runBlockScan() {
+    while(true) {
+        tickBlockScan();
+        await new Promise(resolve => setTimeout(resolve, 2*1000*60));
+    }
+}
+
+async function test() {
+    for(let i = 900; i < 9544; i++) {
+        redisClient.getBlockByHeight(i,function(res) {
+            // console.log(JSON.stringify(res,0,4));
+            let block = res;
+            updateDomainsFromBlock(block);
+        });
+    }
+
+    console.log("test over ...");
+}
+
 console.log(new Date(),"start domain service ...");
+
+// tickBlockScan();
 // tickTranslateAndGoogle();
-// tick();
-run();
+
+runBlockScan();
 runTranslateAndGoogle();
+
+// test();

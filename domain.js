@@ -71,4 +71,22 @@ class Domain {
     }
 }
 
-module.exports = Domain
+class Block {
+    constructor(height=0,txData={}) {
+        this.height = height;
+        this.txData = txData;
+    }
+
+    parse(str) {
+        let obj = JSON.parse(str);
+        this.height = obj["height"];
+        this.txData = obj["txData"]
+        return this;
+    }
+
+    toString() {
+        return JSON.stringify(this);
+    }
+}
+
+module.exports = {Domain,Block}

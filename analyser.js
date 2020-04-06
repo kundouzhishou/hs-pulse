@@ -1,51 +1,62 @@
-const {NodeClient,} = require('hs-client');
+const {Domain,Block} = require("./domain")
+var RedisClient = require("./redis-client");
+var redisClient = new RedisClient().getInstance();
+
+const {NodeClient,WalletClient} = require('hs-client');
 const config = require("./config")
-const client = new NodeClient(config.hsClientOptions);
+const nodeClient = new NodeClient(config.hsClientOptions);
 
-function getBlockTxsByHeight(blockheight) {
-    let blockhash, details, verbose;
 
-    verbose=1;
-    details=0;
+async function run() {
+    redisClient.getBlocks(async function(res) {
+        let type0Amount = 0;
+        // let blockList = res.slice(1000,1020);
+        let blockList = res;
+        for(let block of blockList) {
+            // console.log(`block ${block.height}`);
+            for(let txId in block.txData) {
+                let txData = block.txData[txId];
+                let intputs = txData["inputs"];
 
-    (async () => {
-        const result = await client.execute('getblockbyheight', [ blockheight, verbose, details ]);
-        txs = result["tx"];
-        // console.log(txs);
-
-        for(let txId of txs) {
-            (async () => {
-                // console.log("block=",blockheight, "tx=",txId);
-                const result = await client.getTX(txId);
-                // console.log(JSON.stringify(result,0,4));
-                let outputs = result["outputs"];
-                // console.log(JSON.stringify(outputs,0,4));
-                for(let output of outputs) {
+                let outputs = txData["outputs"];
+                for(let i = 0; i < outputs.length; i++) {
+                    let output = outputs[i];
+                    let input = intputs[i];
                     let covenant = output["covenant"];
                     let txType = covenant["type"];
-                    let action = covenant["action"];
-                    if(txType != 0) {
-                        console.log(txType,action);
-                        console.log("block=",blockheight, "tx=",txId);
-                        console.log(JSON.stringify(outputs,0,4));
+                    let items = covenant["items"];
+                    if(txType == 0) {
+                        if(input && input["prevout"]["hash"] == "0000000000000000000000000000000000000000000000000000000000000000") {
+                            let outputValue = output["value"] / 1000000;
+                            type0Amount += outputValue;
+                        }
+                    }else if(txType == 3) {
+                        // name hash, name, height, and hash
+                        // console.log(txType,action);
+                        // console.log(JSON.stringify(outputs,0,4));
+                    }else if(txType == 2) {
+                        // name hash, zero height, and name
+                        const name = await nodeClient.execute('getnamebyhash', [items[0]]);
+                        console.log("name is :",name,"height:",block.height);
+
+                        redisClient.getDomain(name,function(res){
+                            // if(res != )
+                            console.log(res.toString());
+                        });
+                        return;
+                        // console.log(JSON.stringify(outputs,0,4));
+                        // await new Promise(resolve => setTimeout(resolve, 3*1000));
                     }
                     
-                    // console.log(JSON.stringify(result,0,4));
+                    // console.log(JSON.stringify(output,0,4));
                 }
-                
-            })().catch((err) => {
-                console.error(err.stack);
-            });
+            }
         }
-    })();
+
+        console.log(`type0Amount = ${type0Amount}`);
+    });
+
+    redisClient.quit();
 }
 
-(async () => {
-    const clientinfo = await client.getInfo();
-    let blockheight = clientinfo["chain"]["height"];
-    console.log("current block height",blockheight);
-    for(i =1; i <= blockheight; ++i) {
-        getBlockTxsByHeight(i);
-        await new Promise(resolve => setTimeout(resolve,10));
-    }
-})();
+run();
