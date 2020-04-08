@@ -2,13 +2,15 @@ const fs = require('fs');
 const util = require("util")
 
 const config = require("./config")
-const {NodeClient} = require('hs-client');
+const {NodeClient,WalletClient} = require('hs-client');
 const nodeClient = new NodeClient(config.hsClientOptions);
 
 var RedisClient = require("./redis-client");
 var redisClient = new RedisClient().getInstance();
 
 const DATA_FILE = "data.json";
+
+const walletClient = new WalletClient(config.hsWalletOptions);
 
 // hsd-cli rpc getnameinfo 'stanforth'
 
@@ -21,8 +23,11 @@ async function run() {
     let blockheight = clientinfo["chain"]["height"];
 
     let targetnames = [];
+
     redisClient.getAllDomains(function(res) {
+        
         for(domain of res) {
+
             // domain is bidding state
             if(domain.bidEndHeight() > blockheight && domain.bidStartHeight() < blockheight) {
                 if(domain.bidEndHeight() > checkPointBlock) {
@@ -60,6 +65,58 @@ async function run() {
     });
 }
 
+function getSubscribeNames() {
+    try {
+        var mydata = JSON.parse(fs.readFileSync('./data.json', 'utf-8'));
+        return mydata["subscribes"];
+    }catch (e) {
+        console.log("data file is not readable now ...");
+        return [];
+    }
+}
+
+async function runMyDomains() {
+    let myNames = getSubscribeNames();
+    const clientinfo = await nodeClient.getInfo();
+    let blockheight = clientinfo["chain"]["height"];
+
+    console.log("block height:", blockheight);
+    for(let name of myNames) {
+        redisClient.getDomain(name,function(domain) {
+            if(domain.bidEndHeight() < blockheight) 
+                return;
+
+            let leftBlockStr = (domain.bidEndHeight() - blockheight).toString().padStart(10);
+            let leftTimeStr = "";
+            let scoreStr = domain.score.toString().padStart(18);
+            let translateStr = domain.translate.padStart(10);
+            let bidsInfo = domain.getBidsInfo().toString();
+            leftTimeStr = getTimeInfo(domain.bidEndHeight() - blockheight).toString().padStart(10);
+            
+            let count = myNames.indexOf(name) + 1;
+            console.log(util.format("%s. %s%s%s%s%s  %s",count.toString().padStart(3), domain.name.padStart(10), leftBlockStr ,leftTimeStr,scoreStr,translateStr),bidsInfo);
+        });
+    }
+
+    redisClient.quit();
+}
+
+function runAuction() {
+    id='primary';
+
+    const wallet = walletClient.wallet(id,config.hsWalletOptions.token);
+    (async () => {
+        // const result = await wallet.getInfo();
+        // console.log(result);        
+        (async () => {
+            const result = await wallet.getAccount("default");
+            console.log(result);
+        })();
+    })();
+
+    redisClient.quit();
+}
+
 function getTimeInfo(block) {
     let totalMinutes = block * 10;
     let minutes = totalMinutes % 60;
@@ -76,5 +133,7 @@ function getTimeInfo(block) {
     return "--";
 }
 
-run();
+// run();
+// runAuction();
+runMyDomains();
 

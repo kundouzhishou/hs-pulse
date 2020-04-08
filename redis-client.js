@@ -11,7 +11,7 @@ const KEY_BLOCK = "key_block";
 
 class RedisClient {
     constructor() {
-        new Domain();
+        
     }
 
     getAllDomains(callback) {
@@ -47,8 +47,13 @@ class RedisClient {
 
     getDomain(name,callback) {
         client.hget(KEY_DOMAINS,name,function(err,res) {
-            console.log("[get domain] ",name,":",res);
-            callback(res);
+            // console.log("[get domain] ",name,":",res);
+            if(res) {
+                let domain = new Domain().parse(res);
+                callback(domain);
+            }else {
+                console.log("[get domain] not exist:",name);
+            }
         });
     }
 

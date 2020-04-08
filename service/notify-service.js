@@ -70,7 +70,7 @@ async function checkNotify(name) {
 async function run() {
     while(true) {
         tick();
-        await new Promise(resolve => setTimeout(resolve, 5*1000));
+        await new Promise(resolve => setTimeout(resolve, 30*1000));
     }
 }
 

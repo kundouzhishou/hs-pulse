@@ -15,6 +15,8 @@ const {NodeClient,} = require('hs-client');
 const config = require("../config")
 const nodeClient = new NodeClient(config.hsClientOptions);
 
+let hashNameMap = {};
+
 async function tickTranslateAndGoogle() {
     const clientinfo = await nodeClient.getInfo();
     let blockheight = clientinfo["chain"]["height"];
@@ -71,14 +73,8 @@ async function tickBlockScan() {
                 }
             }
             if(!isExist) {
-                const result = await nodeClient.execute('getblockbyheight', [ i, 1, 0 ]);
-                let txData = {};
-                for(let txId of result["tx"]) {
-                    const result = await nodeClient.getTX(txId);
-                    // console.log(JSON.stringify(result,0,4));
-                    txData[txId] = result;
-                }
-                let block = new Block(i,txData);
+                const result = await nodeClient.getBlock(i);
+                let block = new Block(i,result["txs"]);
                 redisClient.setBlock(block);
 
                 updateDomainsFromBlock(block);
@@ -90,6 +86,7 @@ async function tickBlockScan() {
 }
 
 async function updateDomainsFromBlock(block) {
+    console.log("update block",block.height);
     for(let txId in block.txData) {
         let txData = block.txData[txId];
         let outputs = txData["outputs"];
@@ -100,9 +97,20 @@ async function updateDomainsFromBlock(block) {
             let items = covenant["items"];
             let value = output["value"];
             let address = output["address"];
+
+            let name = '';
+            if(txType == 2 || txType == 3) {
+                let hash = items[0];
+                if(hash in hashNameMap) {
+                    name = hashNameMap[hash];
+                }else {
+                    name = await nodeClient.execute('getnamebyhash', [hash]);
+                    hashNameMap[hash] = name;
+                }
+            }
+
             if(txType == 2) {
                 // name hash, zero height, and name
-                let name = await nodeClient.execute('getnamebyhash', [items[0]]);
                 // console.log("name is :",name,block.height);
                 // console.log(JSON.stringify(outputs,0,4));
                 redisClient.existsDomain(name, function(res) {
@@ -117,7 +125,7 @@ async function updateDomainsFromBlock(block) {
                             // if open info not exist then update
                             if(Object.keys(domain.openInfo).length == 0) {
                                 domain.openInfo = {"height":block.height,"address":address};
-                                console.log("update open info:",openInfo);
+                                console.log("update open info:",domain.openInfo);
                                 redisClient.setDomain(domain);
                             }
                         });
@@ -125,7 +133,6 @@ async function updateDomainsFromBlock(block) {
                 });
             }else if(txType == 3) {
                 // name hash, name, height, and hash
-                let name = await nodeClient.execute('getnamebyhash', [items[0]]);
                 redisClient.getDomain(name,function(domain){
                     assert(domain != "undefined", "domain not exist");
 
@@ -140,6 +147,9 @@ async function updateDomainsFromBlock(block) {
             }
         }
     }
+
+    block.scaned = 1;
+    redisClient.setBlock(block);
 }
 
 async function googleTranslate(name) {
@@ -177,7 +187,7 @@ async function runBlockScan() {
 }
 
 async function test() {
-    for(let i = 2220; i < 2250; i++) {
+    for(let i = 9603; i < 9604; i++) {
         redisClient.getBlockByHeight(i,function(res) {
             // console.log(JSON.stringify(res,0,4));
             let block = res;
@@ -191,7 +201,20 @@ async function test() {
 async function fillBidAndOpenInfo() {
     redisClient.getBlocks(async function(res) {
         for(let block of res) {
-            updateDomainsFromBlock(block);
+            if(block.scaned == 1) {
+                // console.log("scaneed, pass", block.height);
+                continue;
+            }
+                
+
+            try {
+                updateDomainsFromBlock(block);
+            }catch(err) {
+                console.log(block.height);
+                console.log(err);
+                break;
+            }
+            
             await new Promise(resolve => setTimeout(resolve, 5));
         }
     });
@@ -205,4 +228,5 @@ console.log(new Date(),"start domain service ...");
 runBlockScan();
 runTranslateAndGoogle();
 
+// test();
 // fillBidAndOpenInfo();

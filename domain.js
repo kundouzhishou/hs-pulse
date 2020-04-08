@@ -47,6 +47,10 @@ class Domain {
         this.height = height;
         this.translate = translate;
         this.score = score;
+        // [{height,value,address,hash}]
+        this.bidsInfo = [];
+        // height,address
+        this.openInfo = {};
     }
 
     parse(str) {
@@ -55,6 +59,17 @@ class Domain {
         this.height = obj["height"];
         this.translate = obj["translate"]
         this.score = obj["score"];
+        if("bidsInfo" in obj) {
+            this.bidsInfo = obj["bidsInfo"];
+        }
+        if("openInfo" in obj) {
+            this.openInfo = obj["openInfo"];
+        }
+
+        this.bidsInfo.sort(function(a,b) {
+            return a["height"] - b["height"];
+        })
+
         return this;
     }
 
@@ -69,18 +84,42 @@ class Domain {
     bidEndHeight() {
         return this.bidStartHeight() + 5*6*24 + 36;
     }
+
+    bidHashExist(hash) {
+        for(let bidInfo of this.bidsInfo) {
+            if(bidInfo["hash"] == hash) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    getBidsInfo() {
+        let result = [];
+        // console.log(this.bidsInfo);
+        for(let bid of this.bidsInfo) {
+            result.push(Math.floor(bid["value"] / 1000000));
+        }
+
+        return result;
+    }
 }
 
 class Block {
     constructor(height=0,txData={}) {
         this.height = height;
         this.txData = txData;
+        // 0,1,2,4,8 1=open,bid
+        this.scaned = 0;
     }
 
     parse(str) {
         let obj = JSON.parse(str);
         this.height = obj["height"];
-        this.txData = obj["txData"]
+        this.txData = obj["txData"];
+        if("scaned" in obj) {
+            this.scaned = obj["scaned"];
+        }
         return this;
     }
 
