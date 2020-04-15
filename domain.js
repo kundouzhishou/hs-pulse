@@ -47,6 +47,7 @@ class Domain {
         this.height = height;
         this.translate = translate;
         this.score = score;
+        this.bidded = 0;
         // [{height,value,address,hash}]
         this.bidsInfo = [];
         // height,address
@@ -59,6 +60,9 @@ class Domain {
         this.height = obj["height"];
         this.translate = obj["translate"]
         this.score = obj["score"];
+        if("bidded" in obj) {
+            this.bidded = obj["bidded"];
+        }
         if("bidsInfo" in obj) {
             this.bidsInfo = obj["bidsInfo"];
         }
@@ -66,6 +70,7 @@ class Domain {
             this.openInfo = obj["openInfo"];
         }
 
+        // bidinfo pushed not in order
         this.bidsInfo.sort(function(a,b) {
             return a["height"] - b["height"];
         })

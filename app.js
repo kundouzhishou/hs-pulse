@@ -1,9 +1,11 @@
 const fs = require('fs');
 const util = require("util")
 
-const config = require("./config")
+const config = require("./config");
+const utils = require("./utils");
 const {NodeClient,WalletClient} = require('hs-client');
 const nodeClient = new NodeClient(config.hsClientOptions);
+const punycode = require('punycode');
 
 var RedisClient = require("./redis-client");
 var redisClient = new RedisClient().getInstance();
@@ -46,12 +48,15 @@ async function run() {
                 // break =>every
                 return false;
             }
+            // let domainName = domain.name + " " + punycode.toUnicode(domain.name);
+            let domainName = domain.name;
             let leftBlockStr = (domain.bidEndHeight() - blockheight).toString().padStart(3);
             let endBlockStr = domain.bidEndHeight().toString().padStart(8);
             let leftTime = getTimeInfo(domain.bidEndHeight() - blockheight).toString().padStart(10);
             let scoreStr = domain.score.toString().padStart(12);
             let translateStr = domain.translate;
-            console.log(util.format("%s. %s   %s %s   %s     %s",count.toString().padStart(3), domain.name.padStart(30), leftBlockStr ,leftTime,scoreStr,translateStr));
+            let bidsInfo = domain.getBidsInfo().toString().padStart(30);
+            console.log(util.format("%s. %s  %s  %s %s   %s  %s  %s",count.toString().padStart(3), domainName.padStart(30),domain.height, leftBlockStr ,leftTime,scoreStr,bidsInfo,translateStr));
             count ++;
             lastBlock = domain.bidEndHeight();
             return true;
@@ -65,18 +70,10 @@ async function run() {
     });
 }
 
-function getSubscribeNames() {
-    try {
-        var mydata = JSON.parse(fs.readFileSync('./data.json', 'utf-8'));
-        return mydata["subscribes"];
-    }catch (e) {
-        console.log("data file is not readable now ...");
-        return [];
-    }
-}
+
 
 async function runMyDomains() {
-    let myNames = getSubscribeNames();
+    let myNames = utils.getSubscribeNames();
     const clientinfo = await nodeClient.getInfo();
     let blockheight = clientinfo["chain"]["height"];
 
@@ -133,7 +130,6 @@ function getTimeInfo(block) {
     return "--";
 }
 
-// run();
+run();
 // runAuction();
-runMyDomains();
-
+// runMyDomains();

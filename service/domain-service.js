@@ -11,9 +11,12 @@ const {Domain,Block} = require("../domain")
 var RedisClient = require("../redis-client");
 var redisClient = new RedisClient().getInstance();
 
-const {NodeClient,} = require('hs-client');
+const {NodeClient,WalletClient} = require('hs-client');
 const config = require("../config")
 const nodeClient = new NodeClient(config.hsClientOptions);
+
+const walletClient = new WalletClient(config.hsWalletOptions);
+const wallet = walletClient.wallet("primary",config.hsWalletOptions.token);
 
 let hashNameMap = {};
 
@@ -28,7 +31,7 @@ async function tickTranslateAndGoogle() {
                 continue;
             }
 
-            if(domain.translate != "" || (domain.score != 0 && domain.score != "")) {
+            if(Object.entries(domain.translate).length != 0 && domain.score != "") {
                 continue;
             }
 
@@ -53,7 +56,7 @@ async function tickTranslateAndGoogle() {
 
             // translate name
             targetDomain.translate = googleTranslate(targetDomain.name);
-            console.log("update domain",JSON.stringify(targetDomain));
+            // console.log("update domain",JSON.stringify(targetDomain));
             redisClient.setDomain(targetDomain);
         }
     });
@@ -63,11 +66,11 @@ async function tickBlockScan() {
     const clientinfo = await nodeClient.getInfo();
     let blockheight = clientinfo["chain"]["height"];
 
-    redisClient.getBlocks(async function(res) {
+    redisClient.getBlockKeys(async function(res) {
         for(let i = 1; i <= blockheight; i++) {
             let isExist = false;
-            for(let block of res) {
-                if(block.height == i) {
+            for(let blockHeight of res) {
+                if(parseInt(blockHeight) == i) {
                     isExist = true;
                     break;
                 }
@@ -78,6 +81,8 @@ async function tickBlockScan() {
                 redisClient.setBlock(block);
 
                 updateDomainsFromBlock(block);
+
+                clearPendingTxs();
 
                 await new Promise(resolve => setTimeout(resolve, 0.1*1000));
             }
@@ -125,7 +130,7 @@ async function updateDomainsFromBlock(block) {
                             // if open info not exist then update
                             if(Object.keys(domain.openInfo).length == 0) {
                                 domain.openInfo = {"height":block.height,"address":address};
-                                console.log("update open info:",domain.openInfo);
+                                // console.log("update open info:",domain.openInfo);
                                 redisClient.setDomain(domain);
                             }
                         });
@@ -140,7 +145,7 @@ async function updateDomainsFromBlock(block) {
                     if(!domain.bidHashExist(hash)) {
                         let bidInfo = {"address":address,"value":value,"height":block.height,"hash":hash};
                         domain.bidsInfo.push(bidInfo);
-                        console.log("update bid info:",bidInfo);
+                        // console.log("update bid info:",bidInfo);
                         redisClient.setDomain(domain);
                     }
                 });
@@ -152,7 +157,7 @@ async function updateDomainsFromBlock(block) {
     redisClient.setBlock(block);
 }
 
-async function googleTranslate(name) {
+function googleTranslate(name) {
     const url = "https://translation.googleapis.com/language/translate/v2/?q=%s&source=en&target=zh&key=%s";
     var reqRes = request('GET',util.format(url,name,config.googleOptions.auth));
     let translateName = name;
@@ -175,14 +180,29 @@ async function googleTranslate(name) {
 async function runTranslateAndGoogle() {
     while(true) {
         tickTranslateAndGoogle();
-        await new Promise(resolve => setTimeout(resolve, 2*1000));
+        await new Promise(resolve => setTimeout(resolve, 10*1000));
     }
+}
+
+async function clearPendingTxs() {
+    const result = await wallet.getPending();
+    for(let tx of result) {
+        // console.log(`remove tx ${tx["hash"]}`);
+        try {
+            const result = await walletClient.execute('abandontransaction', [tx["hash"]]);
+            // console.log(result);
+        }catch(err) {
+            // console.log(err);
+        }
+    }
+    const afterResult = await wallet.getPending();
+    console.log(`clear pendding amout: ${result.length},after: ${afterResult.length}`);
 }
 
 async function runBlockScan() {
     while(true) {
         tickBlockScan();
-        await new Promise(resolve => setTimeout(resolve, 2*1000*60));
+        await new Promise(resolve => setTimeout(resolve, 30*1000));
     }
 }
 

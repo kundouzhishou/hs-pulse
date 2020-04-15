@@ -7,56 +7,59 @@ const config = require("./config")
 const nodeClient = new NodeClient(config.hsClientOptions);
 
 
-async function run() {
-    redisClient.getBlocks(async function(res) {
-        let type0Amount = 0;
-        // let blockList = res.slice(1000,1020);
-        let blockList = res;
-        for(let block of blockList) {
-            // console.log(`block ${block.height}`);
-            for(let txId in block.txData) {
-                let txData = block.txData[txId];
-                let intputs = txData["inputs"];
+async function runOpenAndBid() {
+    redisClient.getAllDomains(async function(res) {
 
-                let outputs = txData["outputs"];
-                for(let i = 0; i < outputs.length; i++) {
-                    let output = outputs[i];
-                    let input = intputs[i];
-                    let covenant = output["covenant"];
-                    let txType = covenant["type"];
-                    let items = covenant["items"];
-                    if(txType == 0) {
-                        if(input && input["prevout"]["hash"] == "0000000000000000000000000000000000000000000000000000000000000000") {
-                            let outputValue = output["value"] / 1000000;
-                            type0Amount += outputValue;
-                        }
-                    }else if(txType == 3) {
-                        // name hash, name, height, and hash
-                        // console.log(txType,action);
-                        // console.log(JSON.stringify(outputs,0,4));
-                    }else if(txType == 2) {
-                        // name hash, zero height, and name
-                        const name = await nodeClient.execute('getnamebyhash', [items[0]]);
-                        console.log("name is :",name,"height:",block.height);
+        // {"1":{"open":1,"bid":2,"names":[]}}
+        let result = {};
 
-                        redisClient.getDomain(name,function(res){
-                            // if(res != )
-                            console.log(res.toString());
-                        });
-                        return;
-                        // console.log(JSON.stringify(outputs,0,4));
-                        // await new Promise(resolve => setTimeout(resolve, 3*1000));
-                    }
-                    
-                    // console.log(JSON.stringify(output,0,4));
+        for(let domain of res) {
+            if(Object.keys(domain.openInfo).length != 0) {
+                if(!(domain["openInfo"]["height"] in result))
+                    result[domain["openInfo"]["height"]] = {"open":0,"bid":0,"names":[]};
+
+                result[domain["openInfo"]["height"]]["open"] ++;
+
+                // result[domain["openInfo"]["height"]]["names"].push(domain.name);
+            }
+
+            for(let bidInfo of domain.bidsInfo) {
+                if(!(bidInfo["height"] in result)) {
+                    result[bidInfo["height"]] = {"open":0,"bid":0,"names":[]};
                 }
+
+                result[bidInfo["height"]]["bid"] ++;
             }
         }
 
-        console.log(`type0Amount = ${type0Amount}`);
+        // console.log(result);
+
+        for(let height in result) {
+            if(result[height]["open"] > 50 || result[height]["bid"] > 100) {
+                console.log(height,result[height]);
+            }
+        }
+    });
+    
+
+    redisClient.quit();
+}
+
+async function test() {
+    
+    redisClient.quit();
+}
+
+function runDomain() {
+    redisClient.getDomain("zfb",function(res){
+        console.log(res.bidsInfo);
     });
 
     redisClient.quit();
 }
 
-run();
+// run();
+// runDomain();
+runOpenAndBid();
+
+

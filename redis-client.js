@@ -33,7 +33,7 @@ class RedisClient {
     // set domain, do override
     setDomain(domain) {
         client.hset(KEY_DOMAINS,domain.name,domain.toString(),function(err,res) {
-            console.log("[set domain]", domain.name, domain.toString());
+            console.log("[set domain]", domain.name);
             return res;
         });
     }
@@ -90,6 +90,12 @@ class RedisClient {
             })
             // console.log("getBlocks ",result.length);
             callback(result);
+        });
+    }
+
+    getBlockKeys(callback) {
+        client.hkeys(KEY_BLOCK, function(err,res) {
+            callback(res);
         });
     }
 
